@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>VITAL Watch — Clinical AI Safety Shield</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #060d1f;
+      --panel:     #0d1f45;
+      --card:      #0f2557;
+      --border:    #1a3a7a;
+      --green:     #00e5a0;
+      --yellow:    #ffcc00;
+      --red:       #ff3b3b;
+      --blue:      #4a9eff;
+      --text:      #e0eaff;
+      --muted:     #7a9acc;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── TOP NAV ── */
+    .navbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 28px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .navbar .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--green);
+    }
+    .navbar .logo i { font-size: 1.5rem; }
+    .navbar .tagline {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .navbar .status-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #0a3a1a;
+      border: 1px solid var(--green);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+      color: var(--green);
+    }
+    .live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.5s infinite;
+    }
+    .navbar .time {
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    /* ── PHASE BANNER ── */
+    .phase-banner {
+      text-align: center;
+      padding: 10px;
+      font-weight: 700;
+      font-size: 1rem;
+      letter-spacing: 1px;
+      transition: background 0.5s;
+    }
+    .phase-banner.normal   { background: #0a3a1a; color: var(--green); }
+    .phase-banner.warning  { background: #3a2e00; color: var(--yellow); }
+    .phase-banner.critical { background: #3a0000; color: var(--red);
+                             animation: blink 1s infinite; }
+
+    /* ── MAIN LAYOUT ── */
+    .main {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 0;
+      height: calc(100vh - 110px);
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      padding: 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .sidebar h4 {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    /* Vitals cards */
+    .vital-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: border-color 0.3s, background 0.3s;
+    }
+    .vital-card.danger  { border-color: var(--red);    background: #1f0a0a; }
+    .vital-card.warning { border-color: var(--yellow); background: #1f1a00; }
+    .vital-card.ok      { border-color: var(--green);  background: #0a1f14; }
+    .vital-card .icon {
+      width: 42px; height: 42px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
+    .vital-card .info { flex: 1; }
+    .vital-card .val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .vital-card .lbl {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .vital-card .trend {
+      font-size: 0.75rem;
+      margin-top: 3px;
+    }
+
+    /* Mini chart */
+    .sparkline-wrap {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .sparkline-wrap h4 { margin-bottom: 8px; }
+    canvas.spark { width: 100%; height: 60px; }
+
+    /* Alert log */
+    .alert-log {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      flex: 1;
+      overflow-y: auto;
+      max-height: 220px;
+    }
+    .alert-log h4 { margin-bottom: 8px; }
+    .log-entry {
+      font-size: 0.75rem;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+    }
+    .log-entry:last-child { border-bottom: none; }
+    .log-entry .log-time { color: var(--muted); white-space: nowrap; }
+    .log-entry.crit { color: var(--red); }
+    .log-entry.warn { color: var(--yellow); }
+    .log-entry.ok   { color: var(--green); }
+
+    /* ── RIGHT CONTENT ── */
+    .content {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+    }
+    .tab {
+      padding: 12px 20px;
+      font-size: 0.88rem;
+      cursor: pointer;
+      color: var(--muted);
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tab.active {
+      color: var(--green);
+      border-bottom-color: var(--green);
+    }
+    .tab:hover { color: var(--text); }
+
+    .tab-content { display: none; flex: 1; overflow-y: auto; padding: 20px; }
+    .tab-content.active { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── ANALYZE TAB ── */
+    .query-box {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .query-box label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 8px;
+    }
+    .query-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+    textarea {
+      flex: 1;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      color: var(--text);
+      font-size: 0.92rem;
+      font-family: inherit;
+      resize: none;
+      height: 70px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    textarea:focus { border-color: var(--green); }
+
+    .presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .preset-btn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .preset-btn:hover {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    .run-btn {
+      background: var(--green);
+      color: #000;
+      border: none;
+      border-radius: 10px;
+      padding: 0 20px;
+      height: 70px;
+      font-weight: 700;
+      font-size: 0.92rem;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-width: 110px;
+      transition: background 0.2s;
+    }
+    .run-btn:hover { background: #00c48a; }
+    .run-btn:disabled { background: #1a3a2a; color: var(--muted); cursor: not-allowed; }
+    .run-btn i { font-size: 1.3rem; }
+
+    /* Split output */
+    .split-output {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      flex: 1;
+    }
+    .output-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .output-panel .panel-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .output-panel .panel-header i { font-size: 1rem; }
+    .output-text {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 14px;
+      font-size: 0.88rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+      flex: 1;
+      min-height: 120px;
+      color: var(--text);
+    }
+    .verdict-box {
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-align: center;
+    }
+    .verdict-box.red    { background: #2a0000; color: var(--red);
+                          border: 1px solid var(--red);
+                          animation: blink 1s infinite; }
+    .verdict-box.green  { background: #0a1f14; color: var(--green);
+                          border: 1px solid var(--green); }
+    .verdict-box.yellow { background: #1f1a00; color: var(--yellow);
+                          border: 1px solid var(--yellow); }
+    .meta-box {
+      background: #0a1530;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .meta-box strong { color: var(--blue); }
+
+    /* ── HISTORY TAB ── */
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+    }
+    .history-table th {
+      background: var(--panel);
+      padding: 10px 12px;
+      text-align: left;
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+    }
+    .history-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .history-table tr:hover td { background: var(--panel); }
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .badge.safe     { background: #0a1f14; color: var(--green); border: 1px solid var(--green); }
+    .badge.danger   { background: #2a0000; color: var(--red);   border: 1px solid var(--red); }
+    .badge.warning  { background: #1f1a00; color: var(--yellow);border: 1px solid var(--yellow); }
+
+    /* ── VITALS TAB ── */
+    .vitals-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+    .big-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      text-align: center;
+      transition: all 0.3s;
+    }
+    .big-card.danger  { border-color: var(--red);    background: #1f0a0a; }
+    .big-card.warning { border-color: var(--yellow); background: #1f1a00; }
+    .big-card.ok      { border-color: var(--green);  background: #0a1f14; }
+    .big-card i { font-size: 2rem; margin-bottom: 10px; }
+    .big-card .big-val {
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .big-card .big-lbl {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+    .big-card .big-status {
+      margin-top: 8px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    /* ── LOADING SPINNER ── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 6px;
+    }
+
+    /* ── ANIMATIONS ── */
+    @keyframes blink { 0%{opacity:1} 50%{opacity:0.5} 100%{opacity:1} }
+    @keyframes pulse { 0%{opacity:1} 50%{opacity:0.3} 100%{opacity:1} }
+    @keyframes spin  { to { transform: rotate(360deg); } }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+
+    @media(max-width: 900px) {
+      .main { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .split-output { grid-template-columns: 1fr; }
+      .vitals-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="navbar">
+  <div class="logo">
+    <i class="fas fa-heartbeat"></i>
+    VITAL Watch
+    <span class="tagline" style="font-weight:400; font-size:0.75rem; color:var(--muted)">
+      &nbsp;— AI Shield for Real-Time Clinical Safety
+    </span>
+  </div>
+  <div class="status-pill">
+    <span class="live-dot"></span>
+    Live Monitoring Active
+  </div>
+  <div class="time" id="clock">--:--:--<br><span style="font-size:0.72rem">Team VitalGuard</span></div>
+</nav>
+
+<!-- PHASE BANNER -->
+<div class="phase-banner normal" id="phase-banner">
+  ✅ PHASE: NORMAL — Patient Stable
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div>
+      <h4>Live Vitals</h4>
+      <div style="display:flex; flex-direction:column; gap:8px;" id="sidebar-vitals">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <div class="sparkline-wrap">
+      <h4>SpO2 Trend</h4>
+      <canvas id="spark-spo2" class="spark"></canvas>
+    </div>
+
+    <div class="sparkline-wrap">
+      <h4>Heart Rate Trend</h4>
+      <canvas id="spark-hr" class="spark"></canvas>
+    </div>
+
+    <div class="alert-log" id="alert-log">
+      <h4>Event Log</h4>
+      <!-- filled by JS -->
+    </div>
+  </aside>
+
+  <!-- RIGHT -->
+  <div class="content">
+
+    <!-- TABS -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('analyze', this)">
+        <i class="fas fa-stethoscope"></i> Analyze
+      </div>
+      <div class="tab" onclick="switchTab('vitals', this)">
+        <i class="fas fa-chart-line"></i> Vitals Monitor
+      </div>
+      <div class="tab" onclick="switchTab('history', this)">
+        <i class="fas fa-history"></i> Query History
+      </div>
+      <div class="tab" onclick="switchTab('about', this)">
+        <i class="fas fa-info-circle"></i> About
+      </div>
+    </div>
+
+    <!-- TAB: ANALYZE -->
+    <div class="tab-content active" id="tab-analyze">
+
+      <div class="query-box">
+        <label><i class="fas fa-user-nurse"></i> &nbsp;Nurse Query</label>
+        <div class="query-row">
+          <textarea id="query"
+            placeholder="Describe patient symptoms...">Patient has cough and feels warm.</textarea>
+          <button class="run-btn" id="run-btn" onclick="analyze()">
+            <i class="fas fa-search-plus"></i>
+            Analyze
+          </button>
+        </div>
+        <div class="presets">
+          <span style="font-size:0.75rem; color:var(--muted); align-self:center;">
+            Quick queries:
+          </span>
+          <button class="preset-btn"
+            onclick="setQuery('Patient has cough and feels warm.')">
+            Cough + Fever
+          </button>
+          <button class="preset-btn"
+            onclick="setQuery('Patient is short of breath and chest is tight.')">
+            Breathlessness
+          </button>
+          <button class="preset-btn"
+            onclick="setQuery('Patient is dizzy and has rapid heartbeat.')">
+            Dizziness + Palpitation
+          </button>
+          <button class="preset-btn"
+            onclick="setQuery('Patient complains of fatigue and weakness.')">
+            Fatigue
+          </button>
+        </div>
+      </div>
+
+      <div class="split-output">
+
+        <!-- LEFT: Standard AI -->
+        <div class="output-panel">
+          <div class="panel-header" style="color:#ff9966">
+            <i class="fas fa-exclamation-triangle"></i>
+            Standard AI — Blind (No Vitals)
+          </div>
+          <div class="output-text" id="raw-output">
+AI response will appear here...
+
+This panel shows what a standard AI would say
+without access to live patient vitals.
+          </div>
+        </div>
+
+        <!-- RIGHT: VITAL Watch -->
+        <div class="output-panel">
+          <div class="panel-header" style="color:var(--green)">
+            <i class="fas fa-shield-alt"></i>
+            VITAL Watch — Grounded with Live Vitals
+          </div>
+          <div class="output-text" id="vital-output">
+VITAL Watch verified response will appear here...
+
+This panel shows the AI response enriched with
+real-time hardware sensor data.
+          </div>
+          <div class="verdict-box green" id="verdict"
+               style="display:none">
+          </div>
+          <div class="meta-box" id="meta-box" style="display:none">
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB: VITALS -->
+    <div class="tab-content" id="tab-vitals">
+      <div class="vitals-grid" id="big-vitals">
+        <!-- filled by JS -->
+      </div>
+    </div>
+
+    <!-- TAB: HISTORY -->
+    <div class="tab-content" id="tab-history">
+      <div style="overflow-x:auto">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Query</th>
+              <th>HR</th>
+              <th>SpO2</th>
+              <th>Temp</th>
+              <th>Phase</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="history-body">
+            <tr>
+              <td colspan="7" style="text-align:center; color:var(--muted); padding:30px">
+                No queries yet. Run an analysis first.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB: ABOUT -->
+    <div class="tab-content" id="tab-about">
+      <div style="max-width:600px; line-height:1.8; color:var(--muted)">
+        <h2 style="color:var(--green); margin-bottom:12px">
+          <i class="fas fa-heartbeat"></i> VITAL Watch
+        </h2>
+        <p style="margin-bottom:16px; color:var(--text)">
+          AI Shield for Real-Time Clinical Safety
+        </p>
+        <p style="margin-bottom:20px">
+          VITAL Watch intercepts clinical AI prompts and enriches them with
+          live patient vitals from hardware sensors before sending to the LLM.
+          A second Meta-AI then cross-checks the suggestion against the raw
+          sensor data to detect contradictions.
+        </p>
+        <h4 style="color:var(--text); margin-bottom:10px">Tech Stack</h4>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px">
+          <span class="badge safe">ESP32</span>
+          <span class="badge safe">MAX30100</span>
+          <span class="badge safe">DS18B20</span>
+          <span class="badge safe">DHT11</span>
+          <span class="badge safe">Pulse Sensor</span>
+          <span class="badge safe">Wokwi</span>
+          <span class="badge safe">Python Flask</span>
+          <span class="badge safe">Claude API</span>
+        </div>
+        <h4 style="color:var(--text); margin-bottom:10px">Team VitalGuard</h4>
+        <div style="display:flex; flex-wrap:wrap; gap:8px">
+          <span class="badge warning">Dibyo Sundar Basu</span>
+          <span class="badge warning">Sohon Sen</span>
+          <span class="badge warning">Subhranil Ghosh</span>
+          <span class="badge warning">Soham Santra</span>
+        </div>
+        <p style="margin-top:20px; font-size:0.82rem">
+          HACK4IMPACT — Track 2 &nbsp;|&nbsp;
+          KIIT Student Developer & Innovation Summit 2026
+        </p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = "http://localhost:5000";
+
+// ── State ────────────────────────────────────────────
+let currentVitals  = {};
+let history        = [];
+let spo2History    = [];
+let hrHistory      = [];
+let logEntries     = [];
+let lastPhase      = "";
+
+// ── Clock ────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById("clock").innerHTML =
+    now.toLocaleTimeString() +
+    "<br><span style='font-size:0.72rem'>Team VitalGuard</span>";
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Tab switching ─────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll(".tab-content").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  el.classList.add("active");
+}
+
+// ── Preset queries ────────────────────────────────────
+function setQuery(q) {
+  document.getElementById("query").value = q;
+}
+
+// ── Sparkline chart ───────────────────────────────────
+function drawSparkline(canvasId, data, color, min, max) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  canvas.width  = canvas.offsetWidth  * window.devicePixelRatio;
+  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const W = canvas.offsetWidth;
+  const H = canvas.offsetHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  if (data.length < 2) return;
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 2;
+  ctx.lineJoin    = "round";
+  ctx.beginPath();
+
+  data.forEach((val, i) => {
+    const x = (i / (data.length - 1)) * W;
+    const y = H - ((val - min) / (max - min)) * H;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  // Fill
+  ctx.lineTo(W, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = color + "22";
+  ctx.fill();
+}
+
+// ── Add log entry ─────────────────────────────────────
+function addLog(msg, type = "ok") {
+  const time = new Date().toLocaleTimeString();
+  logEntries.unshift({ time, msg, type });
+  if (logEntries.length > 20) logEntries.pop();
+  renderLog();
+}
+
+function renderLog() {
+  const el = document.getElementById("alert-log");
+  const header = "<h4>Event Log</h4>";
+  const entries = logEntries.map(e => `
+    <div class="log-entry ${e.type}">
+      <span class="log-time">${e.time}</span>
+      <span>${e.msg}</span>
+    </div>`).join("");
+  el.innerHTML = header + entries;
+}
+
+// ── Update vitals UI ──────────────────────────────────
+function updateVitalsUI(v) {
+  const phase = v.phase || "NORMAL";
+
+  // Phase banner
+  const banner = document.getElementById("phase-banner");
+  banner.className = "phase-banner " + phase.toLowerCase();
+  banner.innerHTML =
+    phase === "NORMAL"   ? "✅ PHASE: NORMAL — Patient Stable" :
+    phase === "WARNING"  ? "⚠️ PHASE: WARNING — Patient Deteriorating" :
+                           "🚨 PHASE: CRITICAL — Escalate Immediately!";
+
+  // Log phase changes
+  if (phase !== lastPhase) {
+    addLog(`Phase changed to ${phase}`,
+           phase === "NORMAL" ? "ok" : phase === "WARNING" ? "warn" : "crit");
+    lastPhase = phase;
+  }
+
+  const hrDanger   = v.hr_max30100 > 110;
+  const hrWarn     = v.hr_max30100 > 90 && !hrDanger;
+  const spo2Danger = v.spo2 < 94;
+  const spo2Warn   = v.spo2 < 96 && !spo2Danger;
+  const tmpDanger  = v.body_temp > 38.3;
+  const tmpWarn    = v.body_temp > 37.5 && !tmpDanger;
+
+  // Sidebar vitals
+  const sideItems = [
+    { icon:"fa-heartbeat", color:"#e74c3c", val:v.hr_pulse,
+      lbl:"Pulse BPM",     cls:"ok",
+      trend: v.hr_pulse > 100 ? "↑ Elevated" : "→ Normal" },
+    { icon:"fa-heart",     color:"#ff6b6b", val:v.hr_max30100,
+      lbl:"HR MAX30100",   cls: hrDanger?"danger": hrWarn?"warning":"ok",
+      trend: hrDanger ? "↑ Critical" : hrWarn ? "↑ Elevated" : "→ Normal" },
+    { icon:"fa-lungs",     color:"#48dc8c", val:v.spo2+"%",
+      lbl:"SpO2",          cls: spo2Danger?"danger": spo2Warn?"warning":"ok",
+      trend: spo2Danger ? "↓ Critical" : spo2Warn ? "↓ Low" : "→ Normal" },
+    { icon:"fa-thermometer-full", color:"#d9534f", val:v.body_temp+"°C",
+      lbl:"Body Temp",     cls: tmpDanger?"danger": tmpWarn?"warning":"ok",
+      trend: tmpDanger ? "↑ Fever" : tmpWarn ? "↑ Mild" : "→ Normal" },
+    { icon:"fa-thermometer-half", color:"#0275d8", val:v.room_temp+"°C",
+      lbl:"Room Temp",     cls:"ok", trend:"→ Normal" },
+    { icon:"fa-tint",      color:"#5bc0de", val:v.humidity+"%",
+      lbl:"Humidity",      cls:"ok", trend:"→ Normal" },
+  ];
+
+  document.getElementById("sidebar-vitals").innerHTML = sideItems.map(s => `
+    <div class="vital-card ${s.cls}">
+      <div class="icon" style="background:${s.color}22; color:${s.color}">
+        <i class="fas ${s.icon}"></i>
+      </div>
+      <div class="info">
+        <div class="val" style="color:${
+          s.cls==='danger'?'var(--red)':s.cls==='warning'?'var(--yellow)':'var(--green)'
+        }">${s.val}</div>
+        <div class="lbl">${s.lbl}</div>
+        <div class="trend" style="color:${
+          s.cls==='danger'?'var(--red)':s.cls==='warning'?'var(--yellow)':'var(--muted)'
+        }">${s.trend}</div>
+      </div>
+    </div>`).join("");
+
+  // Big vitals tab
+  const bigItems = [
+    { icon:"fa-heartbeat", color:"#e74c3c", val:v.hr_pulse,
+      lbl:"Pulse Sensor BPM", unit:"BPM",
+      cls:"ok", status:"Pulse Sensor" },
+    { icon:"fa-heart",     color:"#ff6b6b", val:v.hr_max30100,
+      lbl:"Heart Rate",    unit:"BPM",
+      cls: hrDanger?"danger": hrWarn?"warning":"ok",
+      status: hrDanger?"⚠ Tachycardia": hrWarn?"Elevated":"Normal" },
+    { icon:"fa-lungs",     color:"#48dc8c", val:v.spo2,
+      lbl:"Blood Oxygen",  unit:"%",
+      cls: spo2Danger?"danger": spo2Warn?"warning":"ok",
+      status: spo2Danger?"⚠ Hypoxia": spo2Warn?"Low":"Normal" },
+    { icon:"fa-thermometer-full", color:"#d9534f", val:v.body_temp,
+      lbl:"Body Temperature", unit:"°C",
+      cls: tmpDanger?"danger": tmpWarn?"warning":"ok",
+      status: tmpDanger?"⚠ Fever": tmpWarn?"Mild Fever":"Normal" },
+    { icon:"fa-thermometer-half", color:"#0275d8", val:v.room_temp,
+      lbl:"Room Temperature", unit:"°C",
+      cls:"ok", status:"DHT11" },
+    { icon:"fa-tint",      color:"#5bc0de", val:v.humidity,
+      lbl:"Humidity",      unit:"%",
+      cls:"ok", status:"DHT11" },
+  ];
+
+  document.getElementById("big-vitals").innerHTML = bigItems.map(b => `
+    <div class="big-card ${b.cls}">
+      <i class="fas ${b.icon}" style="color:${b.color}"></i>
+      <div class="big-val" style="color:${
+        b.cls==='danger'?'var(--red)':b.cls==='warning'?'var(--yellow)':'var(--green)'
+      }">${b.val}<span style="font-size:1.2rem">${b.unit}</span></div>
+      <div class="big-lbl">${b.lbl}</div>
+      <div class="big-status" style="color:${
+        b.cls==='danger'?'var(--red)':b.cls==='warning'?'var(--yellow)':'var(--muted)'
+      }">${b.status}</div>
+    </div>`).join("");
+
+  // Sparklines
+  spo2History.push(v.spo2);
+  hrHistory.push(v.hr_max30100);
+  if (spo2History.length > 30) spo2History.shift();
+  if (hrHistory.length  > 30) hrHistory.shift();
+
+  setTimeout(() => {
+    drawSparkline("spark-spo2", spo2History,
+      spo2Danger ? "#ff3b3b" : spo2Warn ? "#ffcc00" : "#00e5a0", 85, 100);
+    drawSparkline("spark-hr",   hrHistory,
+      hrDanger ? "#ff3b3b" : hrWarn ? "#ffcc00" : "#4a9eff", 60, 140);
+  }, 50);
+}
+
+// ── Fetch vitals every 2s ─────────────────────────────
+setInterval(fetchVitals, 2000);
+fetchVitals();
+
+function fetchVitals() {
+  fetch(`${API}/vitals`)
+    .then(r => r.json())
+    .then(v => {
+      currentVitals = v;
+      updateVitalsUI(v);
+    })
+    .catch(() => {});
+}
+
+// ── Analyze ───────────────────────────────────────────
+function analyze() {
+  const query  = document.getElementById("query").value.trim();
+  if (!query) return;
+
+  const btn = document.getElementById("run-btn");
+  btn.disabled = true;
+  btn.innerHTML = `<span class="spinner"></span><span style="font-size:0.8rem">Running...</span>`;
+
+  document.getElementById("raw-output").innerHTML =
+    `<span class="spinner"></span> Querying standard AI...`;
+  document.getElementById("vital-output").innerHTML =
+    `<span class="spinner"></span> Analyzing with live vitals...`;
+  document.getElementById("verdict").style.display  = "none";
+  document.getElementById("meta-box").style.display = "none";
+
+  addLog(`Query: "${query.slice(0, 40)}..."`, "ok");
+
+  fetch(`${API}/analyze`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ query })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById("raw-output").innerText   = data.ai_suggestion;
+    document.getElementById("vital-output").innerText = data.ai_suggestion;
+
+    // Verdict
+    const verdict = document.getElementById("verdict");
+    verdict.style.display = "block";
+
+    if (!data.safe) {
+      verdict.className = "verdict-box red";
+      verdict.innerHTML = "🚨 RED FLAG DETECTED<br>" +
+        data.red_flags.join("<br>") +
+        (data.contradiction
+          ? "<br><br>⚠️ CONTRADICTION: AI ignored critical vitals!"
+          : "");
+      addLog("RED FLAG triggered — " + data.red_flags[0], "crit");
+    } else {
+      verdict.className = "verdict-box green";
+      verdict.innerHTML = "✅ Vitals stable — AI suggestion appears safe";
+      addLog("Analysis complete — patient safe", "ok");
+    }
+
+    // Meta verdict
+    const meta = document.getElementById("meta-box");
+    meta.style.display = "block";
+    meta.innerHTML = `<strong>🤖 Meta-AI Verdict:</strong><br>${data.meta_verdict}`;
+
+    // Add to history
+    const now = new Date().toLocaleTimeString();
+    history.unshift({
+      time:    now,
+      query:   query.slice(0, 50),
+      hr:      data.vitals.hr_max30100,
+      spo2:    data.vitals.spo2,
+      temp:    data.vitals.body_temp,
+      phase:   data.vitals.phase || "NORMAL",
+      safe:    data.safe
+    });
+    renderHistory();
+
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fas fa-search-plus"></i> Analyze`;
+  })
+  .catch(err => {
+    document.getElementById("raw-output").innerText =
+      "❌ Error: " + err + "\n\nMake sure main.py is running.";
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fas fa-search-plus"></i> Analyze`;
+    addLog("Error: backend not reachable", "crit");
+  });
+}
+
+// ── Render history table ──────────────────────────────
+function renderHistory() {
+  if (history.length === 0) return;
+  document.getElementById("history-body").innerHTML = history.map(h => `
+    <tr>
+      <td style="color:var(--muted); white-space:nowrap">${h.time}</td>
+      <td>${h.query}</td>
+      <td style="color:${h.hr>110?'var(--red)':h.hr>90?'var(--yellow)':'var(--green)'}">${h.hr}</td>
+      <td style="color:${h.spo2<94?'var(--red)':h.spo2<96?'var(--yellow)':'var(--green)'}">${h.spo2}%</td>
+      <td style="color:${h.temp>38.3?'var(--red)':h.temp>37.5?'var(--yellow)':'var(--green)'}">${h.temp}°C</td>
+      <td>
+        <span class="badge ${
+          h.phase==='CRITICAL'?'danger':h.phase==='WARNING'?'warning':'safe'
+        }">${h.phase}</span>
+      </td>
+      <td>
+        <span class="badge ${h.safe ? 'safe' : 'danger'}">
+          ${h.safe ? '✅ Safe' : '🚨 Red Flag'}
+        </span>
+      </td>
+    </tr>`).join("");
+}
+
+// ── Enter key to submit ───────────────────────────────
+document.getElementById("query").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    analyze();
+  }
+});
+</script>
+</body>
+</html>

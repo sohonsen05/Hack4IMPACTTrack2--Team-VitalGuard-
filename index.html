@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MediWatch — Patient Vitals Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:          #070d14;
+    --surface:     #0c1520;
+    --surface2:    #111d2b;
+    --border:      #1a2e42;
+    --cyan:        #00d4ff;
+    --green:       #00ff9d;
+    --yellow:      #ffd93d;
+    --orange:      #ff8c42;
+    --red:         #ff3c5c;
+    --red-glow:    rgba(255,60,92,0.15);
+    --yellow-glow: rgba(255,217,61,0.12);
+    --cyan-glow:   rgba(0,212,255,0.10);
+    --text:        #d4e6f7;
+    --muted:       #4a6a88;
+    --mono:        'Space Mono', monospace;
+    --sans:        'DM Sans', sans-serif;
+  }
+
+  /* ── RESET — NO transitions on anything data-driven ── */
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* ── Header — static, never changes ── */
+  header {
+    position:relative; z-index:10;
+    border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(0,212,255,0.04) 0%,transparent 100%);
+    padding:20px 40px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .header-left     { display:flex; flex-direction:column; gap:4px; }
+  .header-label    { font-family:var(--mono); font-size:10px; color:var(--cyan); letter-spacing:3px; text-transform:uppercase; }
+  .header-doc-name { font-family:var(--mono); font-size:22px; font-weight:700; color:#fff; }
+  .header-spec     { font-size:13px; color:var(--muted); font-weight:300; }
+  .header-right    { display:flex; align-items:center; gap:24px; }
+  .ward-badge {
+    background:var(--surface2); border:1px solid var(--border); border-left:3px solid var(--cyan);
+    padding:8px 16px; font-family:var(--mono); font-size:11px; color:var(--cyan); letter-spacing:1px;
+  }
+  .conn-wrap  { display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:11px; }
+  /* Only the pulsing dot has animation — it's decorative not data-driven */
+  .dot        { width:8px; height:8px; border-radius:50%; }
+  .dot.live   { background:var(--green); box-shadow:0 0 8px var(--green); animation:blink-dot 2s infinite; }
+  .dot.error  { background:var(--red); }
+  .dot.wait   { background:var(--muted); }
+  @keyframes blink-dot { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  #clock { font-family:var(--mono); font-size:12px; color:var(--muted); }
+
+  /* ── Stats bar ── */
+  .stats-bar  { position:relative; z-index:10; display:flex; gap:1px; border-bottom:1px solid var(--border); background:var(--border); }
+  .stat-item  { flex:1; background:var(--surface); padding:12px 20px; display:flex; flex-direction:column; gap:2px; }
+  .stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:2px; }
+  .stat-value { font-family:var(--mono); font-size:20px; font-weight:700; }
+  /* stat colors set inline via JS to avoid class-swap repaints */
+
+  main { position:relative; z-index:10; padding:32px 40px; display:flex; flex-direction:column; gap:28px; }
+
+  /* ── Alert banner ── */
+  #alert-banner {
+    display:none;
+    border:1px solid var(--red);
+    background:var(--red-glow);
+    padding:14px 22px;
+  }
+  .banner-title { font-family:var(--mono); font-size:11px; color:var(--red); letter-spacing:2px; margin-bottom:8px; }
+  .banner-chips { display:flex; flex-wrap:wrap; gap:10px; }
+  .alert-chip   { background:rgba(255,60,92,0.12); border:1px solid rgba(255,60,92,0.35); padding:3px 10px; font-size:11px; color:#ffaab9; font-family:var(--mono); }
+
+  /* ── Patient grid ── */
+  .patients-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(420px,1fr)); gap:20px; }
+
+  /* ── Patient card — NO transition ── */
+  .patient-card { background:var(--surface); overflow:hidden; }
+
+  /* border & glow set via inline style in JS so no class swap */
+  .card-header  { padding:16px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); }
+  .pt-info      { display:flex; flex-direction:column; gap:3px; }
+  .pt-name      { font-size:16px; font-weight:600; color:#fff; }
+  .pt-meta      { font-size:11px; color:var(--muted); font-family:var(--mono); }
+
+  .id-badge     { font-family:var(--mono); font-size:10px; color:var(--cyan); background:var(--cyan-glow); border:1px solid rgba(0,212,255,0.2); padding:3px 8px; }
+  .src-badge    { font-family:var(--mono); font-size:9px; padding:3px 7px; border-width:1px; border-style:solid; }
+  /* src badge colors set inline */
+  .status-pill  { font-family:var(--mono); font-size:10px; font-weight:700; padding:4px 10px; letter-spacing:1.5px; border-width:1px; border-style:solid; }
+  /* pill colors set inline */
+
+  /* ── Vitals grid — NO transition, NO animation ── */
+  .vitals-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--border); }
+  .vital-cell  { padding:14px 16px; display:flex; flex-direction:column; gap:4px; position:relative; overflow:hidden; }
+  .vital-cell::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  /* cell colors & top-bar set inline */
+
+  .vital-label { font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:2px; }
+  .vital-value { font-family:var(--mono); font-size:22px; font-weight:700; line-height:1; }
+  .vital-unit  { font-size:10px; color:var(--muted); font-family:var(--mono); }
+
+  /* ── Alerts section ── */
+  .alerts-section { border-top:1px solid var(--border); }
+  .alerts-header  { padding:10px 20px; font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:2px; text-transform:uppercase; border-bottom:1px solid var(--border); display:none; align-items:center; justify-content:space-between; }
+  .alert-count    { background:var(--red); color:#fff; font-size:9px; padding:1px 6px; border-radius:2px; font-weight:700; }
+
+  .no-alerts     { padding:12px 20px; font-size:12px; color:var(--muted); font-family:var(--mono); display:flex; align-items:center; gap:8px; }
+  .no-alerts::before { content:'●'; color:var(--green); font-size:8px; }
+
+  .alert-row     { padding:12px 20px; border-bottom:1px solid var(--border); display:none; gap:14px; align-items:flex-start; }
+  .alert-row:last-of-type { border-bottom:none; }
+  .alert-tag     { font-family:var(--mono); font-size:9px; font-weight:700; padding:2px 6px; letter-spacing:1px; white-space:nowrap; margin-top:2px; flex-shrink:0; border-width:1px; border-style:solid; }
+  .alert-body    { display:flex; flex-direction:column; gap:3px; flex:1; }
+  .alert-title   { font-size:13px; font-weight:500; color:#fff; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .alert-val-tag { font-family:var(--mono); font-size:11px; color:var(--orange); background:rgba(255,140,66,0.12); padding:1px 6px; }
+  .alert-interp  { font-size:11px; color:var(--muted); line-height:1.5; }
+
+  /* ── AI section ── */
+  .ai-section  { border-top:1px solid var(--border); padding:12px 20px; display:none; }
+  .ai-btn      { padding:8px 16px; background:transparent; border:1px solid rgba(0,212,255,0.3); color:var(--cyan); font-family:var(--mono); font-size:10px; letter-spacing:1.5px; cursor:pointer; width:100%; text-align:left; }
+  .ai-btn:hover    { background:var(--cyan-glow); border-color:var(--cyan); }
+  .ai-btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .ai-manual   { margin-top:10px; padding:12px; background:rgba(0,212,255,0.05); border:1px solid rgba(0,212,255,0.15); border-left:3px solid var(--cyan); font-size:12px; color:var(--text); line-height:1.6; font-style:italic; display:none; }
+  .ai-live     { margin-top:10px; padding:12px; background:rgba(0,255,157,0.04); border:1px solid rgba(0,255,157,0.18); border-left:3px solid var(--green); font-size:12px; color:var(--text); line-height:1.6; display:none; }
+  .ai-live-lbl { font-family:var(--mono); font-size:9px; color:var(--green); letter-spacing:2px; margin-bottom:6px; }
+
+  .pdf-btn {
+    margin:10px 20px 0;
+    padding:8px 16px;
+    background: transparent;
+    border: 1px solid rgba(0,255,157,0.35);
+    color: var(--green);
+    font-family: var(--mono); font-size:10px; letter-spacing:1.5px;
+    cursor:pointer; width:calc(100% - 40px); text-align:left;
+    display:flex; align-items:center; gap:8px;
+  }
+  .pdf-btn:hover    { background:rgba(0,255,157,0.07); border-color:var(--green); }
+  .pdf-btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .pdf-btn svg      { flex-shrink:0; }
+
+  ::-webkit-scrollbar { width:4px; }
+  ::-webkit-scrollbar-track { background:var(--bg); }
+  ::-webkit-scrollbar-thumb { background:var(--border); }
+
+  #loading { position:fixed; inset:0; background:var(--bg); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:999; gap:16px; }
+  .ld-text  { font-family:var(--mono); font-size:13px; color:var(--cyan); letter-spacing:3px; }
+  .ld-bar   { width:200px; height:2px; background:var(--border); overflow:hidden; }
+  .ld-fill  { height:100%; background:var(--cyan); animation:ld 1.5s ease-in-out infinite; }
+  @keyframes ld { 0%{width:0%;margin-left:0} 50%{width:60%} 100%{width:0%;margin-left:100%} }
+
+  /* ── Login Page ── */
+  #login-page {
+    position:fixed; inset:0; z-index:2000;
+    background:var(--bg);
+    display:flex; align-items:center; justify-content:center;
+  }
+
+  #login-page::before {
+    content:''; position:absolute; inset:0; pointer-events:none;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+    background-size:40px 40px;
+  }
+
+  .login-box {
+    position:relative; z-index:1;
+    width:100%; max-width:400px;
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-top:3px solid var(--cyan);
+    padding:48px 40px 40px;
+    display:flex; flex-direction:column; gap:0;
+  }
+
+  .login-logo {
+    font-family:var(--mono); font-size:26px; font-weight:700;
+    color:#fff; letter-spacing:-1px; margin-bottom:4px;
+  }
+  .login-logo span { color:var(--cyan); }
+
+  .login-subtitle {
+    font-size:11px; color:var(--muted); font-family:var(--mono);
+    letter-spacing:2px; text-transform:uppercase; margin-bottom:36px;
+  }
+
+  .login-field { display:flex; flex-direction:column; gap:6px; margin-bottom:18px; }
+
+  .login-label {
+    font-family:var(--mono); font-size:10px; color:var(--cyan);
+    letter-spacing:2px; text-transform:uppercase;
+  }
+
+  .login-input {
+    background:var(--surface2);
+    border:1px solid var(--border);
+    border-radius:0;
+    color:var(--text);
+    font-family:var(--mono); font-size:13px;
+    padding:11px 14px;
+    outline:none;
+    width:100%;
+    transition:border-color 0.2s;
+  }
+  .login-input:focus { border-color:var(--cyan); }
+  .login-input::placeholder { color:var(--muted); }
+
+  .login-btn {
+    margin-top:10px;
+    width:100%; padding:13px;
+    background:var(--cyan);
+    color:#070d14;
+    border:none; cursor:pointer;
+    font-family:var(--mono); font-size:12px; font-weight:700;
+    letter-spacing:2px; text-transform:uppercase;
+    transition:opacity 0.2s;
+  }
+  .login-btn:hover    { opacity:0.88; }
+  .login-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+  .login-error {
+    margin-top:14px; padding:10px 14px;
+    background:rgba(255,60,92,0.1);
+    border:1px solid rgba(255,60,92,0.4);
+    color:#ff3c5c;
+    font-family:var(--mono); font-size:11px; letter-spacing:1px;
+    display:none; text-align:center;
+  }
+
+  .login-footer {
+    margin-top:32px; padding-top:18px;
+    border-top:1px solid var(--border);
+    font-size:11px; color:var(--muted); text-align:center;
+  }
+
+  .login-footer strong { color:var(--text); font-weight:500; }
+
+  .login-page-out {
+    animation: login-out 0.4s ease forwards;
+  }
+  @keyframes login-out {
+    0%   { opacity:1; transform:scale(1); }
+    100% { opacity:0; transform:scale(1.03); pointer-events:none; }
+  }
+
+  /* Logout button in header */
+  .logout-btn {
+    font-family:var(--mono); font-size:10px;
+    color:var(--muted); background:transparent;
+    border:1px solid var(--border); padding:5px 10px;
+    cursor:pointer; letter-spacing:1px;
+  }
+  .logout-btn:hover { color:var(--red); border-color:var(--red); }
+</style>
+</head>
+<body>
+
+
+<div id="login-page">
+  <div class="login-box">
+    <div class="login-logo">Medi<span>Watch</span></div>
+    <div class="login-subtitle">ICU Vitals Dashboard</div>
+
+    <div class="login-field">
+      <label class="login-label" for="username">Username</label>
+      <input class="login-input" id="username" type="text"
+             placeholder="Enter username" autocomplete="off"
+             onkeydown="if(event.key==='Enter') doLogin()"/>
+    </div>
+
+    <div class="login-field">
+      <label class="login-label" for="password">Password</label>
+      <input class="login-input" id="password" type="password"
+             placeholder="Enter password"
+             onkeydown="if(event.key==='Enter') doLogin()"/>
+    </div>
+
+    <button class="login-btn" id="login-btn" onclick="doLogin()">
+      LOGIN TO DASHBOARD
+    </button>
+
+    <div class="login-error" id="login-error">
+      ⚠ Invalid credentials — please try again
+    </div>
+
+    <div class="login-footer">
+      Authorised personnel only<br/>
+      <strong>ICU Ward 3 · Dr. Sougata Bose</strong>
+    </div>
+  </div>
+</div>
+
+<div id="loading">
+  <div class="ld-text">CONNECTING TO VITALS STREAM</div>
+  <div class="ld-bar"><div class="ld-fill"></div></div>
+</div>
+
+<header>
+  <div class="header-left">
+    <span class="header-label">Attending Physician</span>
+    <span class="header-doc-name" id="doc-name">—</span>
+    <span class="header-spec"     id="doc-spec">—</span>
+  </div>
+  <div class="header-right">
+    <span id="clock">—</span>
+    <div class="ward-badge" id="ward-badge">—</div>
+    <button class="logout-btn" onclick="doLogout()">LOGOUT</button>
+    <div class="conn-wrap">
+      <div class="dot wait" id="dot"></div>
+      <span id="conn-txt">CONNECTING</span>
+    </div>
+  </div>
+</header>
+
+<div class="stats-bar">
+  <div class="stat-item"><span class="stat-label">Total Patients</span><span class="stat-value" id="st-total">—</span></div>
+  <div class="stat-item"><span class="stat-label">Stable</span>        <span class="stat-value" id="st-stable" style="color:var(--green)">—</span></div>
+  <div class="stat-item"><span class="stat-label">Warning</span>       <span class="stat-value" id="st-warn"   style="color:var(--yellow)">—</span></div>
+  <div class="stat-item"><span class="stat-label">Critical</span>      <span class="stat-value" id="st-crit"   style="color:var(--orange)">—</span></div>
+  <div class="stat-item"><span class="stat-label">Emergency</span>     <span class="stat-value" id="st-emrg"   style="color:var(--red)">—</span></div>
+</div>
+
+<main>
+  <div id="alert-banner">
+    <div class="banner-title">⚠ ACTIVE CRITICAL ALERTS</div>
+    <div class="banner-chips" id="banner-chips"></div>
+  </div>
+  <div class="patients-grid" id="grid"></div>
+</main>
+
+<script>
+const API  = "http://localhost:8080";
+const WS   = "ws://localhost:8080/ws";
+const POLL = 300000; // 5 minutes
+
+const VITAL_LABELS = {
+  hr_pulse:"HR Pulse", hr_max30100:"HR Sensor",
+  spo2:"SpO₂", body_temp:"Body Temp",
+  room_temp:"Room Temp", humidity:"Humidity"
+};
+
+const STATUS_STYLES = {
+  STABLE:    { border:"1px solid #1a2e42",   shadow:"none",                            pill:"color:#00ff9d;border-color:#00ff9d;background:rgba(0,255,157,0.08)" },
+  WARNING:   { border:"1px solid #ffd93d",   shadow:"0 0 20px rgba(255,217,61,0.12)",  pill:"color:#ffd93d;border-color:#ffd93d;background:rgba(255,217,61,0.08)" },
+  CRITICAL:  { border:"1px solid #ff8c42",   shadow:"0 0 20px rgba(255,140,66,0.18)",  pill:"color:#ff8c42;border-color:#ff8c42;background:rgba(255,140,66,0.10)" },
+  EMERGENCY: { border:"1px solid #ff3c5c",   shadow:"0 0 28px rgba(255,60,92,0.20)",   pill:"color:#ff3c5c;border-color:#ff3c5c;background:rgba(255,60,92,0.10)"  },
+};
+
+const VITAL_STYLES = {
+  normal:   { bg:"#111d2b", bar:"#00ff9d", color:"#ffffff" },
+  warning:  { bg:"rgba(255,217,61,0.06)", bar:"#ffd93d", color:"#ffd93d" },
+  critical: { bg:"rgba(255,60,92,0.07)",  bar:"#ff3c5c", color:"#ff3c5c" },
+};
+
+const ALERT_TAG_STYLES = {
+  CRITICAL:  "color:#ff8c42;border-color:#ff8c42;background:rgba(255,140,66,0.18)",
+  WARNING:   "color:#ffd93d;border-color:#ffd93d;background:rgba(255,217,61,0.14)",
+  EMERGENCY: "color:#ff3c5c;border-color:#ff3c5c;background:rgba(255,60,92,0.18)",
+};
+
+const MAX_SLOTS = 4;
+let   ws, reconnTimer, pollTimer;
+let   lastData = {};   // keyed by patient id — for deep diff
+
+// ── Clock (completely independent) ──────────────────────────────
+setInterval(() => {
+  const t = new Date().toLocaleTimeString("en-IN",{hour12:false});
+  const el = document.getElementById("clock");
+  if (el.textContent !== t+" IST") el.textContent = t+" IST";
+}, 1000);
+
+// ── Tiny DOM helpers — write ONLY when value differs ─────────────
+function tx(id, v) {          // set textContent
+  const e = document.getElementById(id);
+  if (e && e.textContent !== String(v)) e.textContent = String(v);
+}
+function css(id, prop, v) {   // set one style property
+  const e = document.getElementById(id);
+  if (e && e.style[prop] !== v) e.style[prop] = v;
+}
+function show(id, visible) {  // show/hide
+  const e = document.getElementById(id);
+  if (!e) return;
+  const want = visible ? "" : "none";
+  if (e.style.display !== want) e.style.display = want;
+}
+function showFlex(id, visible) {
+  const e = document.getElementById(id);
+  if (!e) return;
+  const want = visible ? "flex" : "none";
+  if (e.style.display !== want) e.style.display = want;
+}
+
+// ── Build card skeleton — called ONCE per patient ────────────────
+function buildCard(p) {
+  const vitals = Object.keys(p.vitals).map(k => `
+    <div class="vital-cell" id="vc-${p.id}-${k}">
+      <span class="vital-label">${VITAL_LABELS[k]||k}</span>
+      <span class="vital-value" id="vv-${p.id}-${k}">—</span>
+      <span class="vital-unit">${p.vitals[k].unit}</span>
+    </div>`).join("");
+
+  const slots = Array.from({length:MAX_SLOTS},(_,i)=>`
+    <div class="alert-row" id="ar-${p.id}-${i}">
+      <span class="alert-tag" id="at-${p.id}-${i}"></span>
+      <div class="alert-body">
+        <div class="alert-title">
+          <span id="am-${p.id}-${i}"></span>
+          <span class="alert-val-tag" id="av-${p.id}-${i}"></span>
+        </div>
+        <div class="alert-interp" id="ap-${p.id}-${i}"></div>
+      </div>
+    </div>`).join("");
+
+  return `
+    <div class="card-header">
+      <div class="pt-info">
+        <span class="pt-name">${p.name}</span>
+        <span class="pt-meta">${p.age}y · ${p.gender==="M"?"Male":"Female"} · ${p.bed}</span>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <span class="src-badge" id="src-${p.id}">SIM</span>
+        <span class="id-badge">${p.id}</span>
+        <span class="status-pill" id="sp-${p.id}">STABLE</span>
+      </div>
+    </div>
+    <div class="vitals-grid">${vitals}</div>
+    <div class="alerts-section">
+      <div class="alerts-header" id="ah-${p.id}">
+        Active Alerts <span class="alert-count" id="ac-${p.id}">0</span>
+      </div>
+      <div class="no-alerts" id="na-${p.id}">All vitals within normal range</div>
+      ${slots}
+    </div>
+    <div class="ai-section" id="ais-${p.id}">
+      <button class="ai-btn" id="aib-${p.id}" onclick="getAI('${p.id}',this)">▶ GET AI CLINICAL ASSESSMENT</button>
+      <div class="ai-manual" id="aim-${p.id}"></div>
+      <div class="ai-live"   id="ail-${p.id}">
+        <div class="ai-live-lbl">⬡ LIVE AI — FROM HARDWARE</div>
+        <span id="ailt-${p.id}"></span>
+      </div>
+    </div>
+    <button class="pdf-btn" id="pdf-btn-${p.id}" onclick="downloadPDF('${p.id}','${p.name}',this)">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="12" y1="18" x2="12" y2="12"/>
+        <line x1="9" y1="15" x2="15" y2="15"/>
+      </svg>
+      DOWNLOAD PDF REPORT
+    </button>`;
+}
+
+// ── Core patch — surgically updates only what changed ────────────
+function patch(payload) {
+  const {doctor, patients} = payload;
+
+  // Header text — idempotent
+  tx("doc-name",   doctor.name);
+  tx("doc-spec",   doctor.specialization);
+  tx("ward-badge", doctor.ward);
+
+  // Stats
+  const cnt = {STABLE:0,WARNING:0,CRITICAL:0,EMERGENCY:0};
+  patients.forEach(p => cnt[p.overall_status]++);
+  tx("st-total", patients.length);
+  tx("st-stable", cnt.STABLE);
+  tx("st-warn",   cnt.WARNING);
+  tx("st-crit",   cnt.CRITICAL);
+  tx("st-emrg",   cnt.EMERGENCY);
+
+  // Banner
+  const crits = patients.filter(p=>["CRITICAL","EMERGENCY"].includes(p.overall_status));
+  const banner = document.getElementById("alert-banner");
+  if (crits.length) {
+    banner.style.display = "block";
+    const chips = crits.map(p=>`<span class="alert-chip">⚡ ${p.name} — ${p.overall_status}</span>`).join("");
+    const bc = document.getElementById("banner-chips");
+    if (bc.innerHTML !== chips) bc.innerHTML = chips;
+  } else {
+    banner.style.display = "none";
+  }
+
+  // Per-patient
+  const grid = document.getElementById("grid");
+  patients.forEach(p => {
+
+    // Build skeleton once
+    if (!document.getElementById(`card-${p.id}`)) {
+      const card = document.createElement("div");
+      card.id        = `card-${p.id}`;
+      card.className = "patient-card";
+      card.innerHTML = buildCard(p);
+      grid.appendChild(card);
+    }
+
+    // Only update if data actually changed (deep check via JSON)
+    const key     = p.id;
+    const current = JSON.stringify({v:p.vitals, a:p.alerts, s:p.overall_status, src:p.source, ai:p.ai_interpretation});
+    if (lastData[key] === current) return;   // ← skip entirely if nothing changed
+    lastData[key] = current;
+
+    // ── Card border & shadow ──────────────────────────────────────
+    const ss = STATUS_STYLES[p.overall_status] || STATUS_STYLES.STABLE;
+    const card = document.getElementById(`card-${p.id}`);
+    if (card.style.border   !== ss.border) card.style.border   = ss.border;
+    if (card.style.boxShadow !== ss.shadow) card.style.boxShadow = ss.shadow;
+
+    // ── Status pill ───────────────────────────────────────────────
+    const pill = document.getElementById(`sp-${p.id}`);
+    if (pill) {
+      if (pill.textContent !== p.overall_status) pill.textContent = p.overall_status;
+      if (pill.style.cssText !== ss.pill)         pill.style.cssText = ss.pill;
+    }
+
+    // ── Source badge ──────────────────────────────────────────────
+    const srcEl = document.getElementById(`src-${p.id}`);
+    if (srcEl) {
+      const live = p.source === "LIVE HARDWARE";
+      const txt  = live ? "LIVE" : "SIM";
+      const sty  = live
+        ? "color:#00ff9d;border-color:#00ff9d;background:rgba(0,255,157,0.08)"
+        : "color:#4a6a88;border-color:#1a2e42;background:transparent";
+      if (srcEl.textContent !== txt)      srcEl.textContent = txt;
+      if (srcEl.style.cssText !== sty)    srcEl.style.cssText = sty;
+    }
+
+    // ── Vitals ────────────────────────────────────────────────────
+    Object.entries(p.vitals).forEach(([k,v]) => {
+      const cell  = document.getElementById(`vc-${p.id}-${k}`);
+      const valEl = document.getElementById(`vv-${p.id}-${k}`);
+      if (!cell || !valEl) return;
+      const vs = VITAL_STYLES[v.status] || VITAL_STYLES.normal;
+      if (cell.style.background !== vs.bg)           cell.style.background = vs.bg;
+      // update the ::before bar via a CSS variable trick — use outline instead
+      if (!cell._bar) {
+        cell._bar = cell.querySelector("span:first-child") || cell;
+        // inject top bar as a real element for JS control
+        const bar = document.createElement("div");
+        bar.style.cssText = "position:absolute;top:0;left:0;right:0;height:2px";
+        bar.id = `vbar-${p.id}-${k}`;
+        cell.prepend(bar);
+        cell._bar = bar;
+      }
+      if (cell._bar.style.background !== vs.bar) cell._bar.style.background = vs.bar;
+      if (valEl.style.color !== vs.color)          valEl.style.color = vs.color;
+      if (valEl.textContent !== String(v.value))   valEl.textContent = String(v.value);
+    });
+
+    // ── Alerts ────────────────────────────────────────────────────
+    const hasAlerts = p.alerts.length > 0;
+    show("na-"+p.id, !hasAlerts);
+    showFlex("ah-"+p.id, hasAlerts);
+    tx("ac-"+p.id, p.alerts.length);
+
+    for (let i = 0; i < MAX_SLOTS; i++) {
+      const row = document.getElementById(`ar-${p.id}-${i}`);
+      if (!row) continue;
+      const a = p.alerts[i];
+      if (!a) {
+        if (row.style.display !== "none") row.style.display = "none";
+      } else {
+        if (row.style.display !== "flex") row.style.display = "flex";
+        const tag = document.getElementById(`at-${p.id}-${i}`);
+        if (tag) {
+          if (tag.textContent !== a.level)       tag.textContent = a.level;
+          const ts = ALERT_TAG_STYLES[a.level]||"";
+          if (tag.style.cssText !== ts)          tag.style.cssText = ts;
+        }
+        tx(`am-${p.id}-${i}`, a.message);
+        tx(`av-${p.id}-${i}`, a.value);
+        tx(`ap-${p.id}-${i}`, a.interpretation);
+      }
+    }
+
+    // ── AI section ────────────────────────────────────────────────
+    const aisEl = document.getElementById(`ais-${p.id}`);
+    if (aisEl) aisEl.style.display = hasAlerts ? "block" : "none";
+
+    if (p.ai_interpretation) {
+      const liveTxt = document.getElementById(`ailt-${p.id}`);
+      if (liveTxt && liveTxt.textContent !== p.ai_interpretation)
+        liveTxt.textContent = p.ai_interpretation;
+      show(`ail-${p.id}`, true);
+      show(`aib-${p.id}`, false);
+    }
+  });
+}
+
+// ── WebSocket with HTTP polling fallback ─────────────────────────
+function setStatus(state) {   // "live" | "error" | "wait"
+  const dot = document.getElementById("dot");
+  const txt = document.getElementById("conn-txt");
+  dot.className = "dot " + state;
+  txt.textContent = state === "live" ? "LIVE" : state === "error" ? "RECONNECTING" : "CONNECTING";
+}
+
+async function pollOnce() {
+  try {
+    const r = await fetch(`${API}/api/snapshot`);
+    if (!r.ok) return;
+    patch(await r.json());
+  } catch(_) {}
+}
+
+function startPolling() {
+  clearInterval(pollTimer);
+  pollTimer = setInterval(pollOnce, POLL);
+  pollOnce();
+}
+
+function connectWS() {
+  clearTimeout(reconnTimer);
+  try { if (ws) ws.close(); } catch(_) {}
+
+  ws = new WebSocket(WS);
+
+  ws.onopen = () => {
+    setStatus("live");
+    document.getElementById("loading").style.display = "none";
+    clearInterval(pollTimer);   // WS is up — stop polling
+  };
+
+  ws.onmessage = e => {
+    try { patch(JSON.parse(e.data)); } catch(_) {}
+  };
+
+  ws.onerror = () => {};
+
+  ws.onclose = () => {
+    setStatus("error");
+    startPolling();             // fall back to polling while WS is down
+    reconnTimer = setTimeout(connectWS, 4000);
+  };
+}
+
+// ── Manual AI ────────────────────────────────────────────────────
+async function getAI(pid, btn) {
+  btn.disabled = true;
+  btn.textContent = "⏳ FETCHING...";
+  try {
+    const d = await (await fetch(`${API}/api/ai/${pid}`)).json();
+    const el = document.getElementById(`aim-${pid}`);
+    el.textContent  = d.interpretation || "No assessment available.";
+    el.style.display = "block";
+    btn.style.display = "none";
+  } catch {
+    btn.textContent = "⚠ UNAVAILABLE — RETRY";
+    btn.disabled = false;
+  }
+}
+
+async function downloadPDF(pid, name, btn) {
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg> GENERATING...`;
+  try {
+    const resp = await fetch(`${API}/api/report/${pid}`);
+    if (!resp.ok) throw new Error("Failed");
+    const blob = await resp.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `report_${pid}_${name.replace(/ /g,"_")}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> DOWNLOADED`;
+    setTimeout(() => { btn.innerHTML = orig; btn.disabled = false; }, 3000);
+  } catch {
+    btn.innerHTML = `⚠ FAILED — RETRY`;
+    btn.disabled = false;
+  }
+}
+
+
+// ── Credentials (add more users as needed) ───────────────────────
+const USERS = {
+  "drBose":  "sougata2024",
+  "nurse":   "ward3nurse",
+  "admin":   "admin2024",
+};
+
+function doLogin() {
+  const user = document.getElementById("username").value.trim();
+  const pass = document.getElementById("password").value;
+  const err  = document.getElementById("login-error");
+  const btn  = document.getElementById("login-btn");
+
+  if (!user || !pass) {
+    err.textContent = "⚠ Please enter both username and password";
+    err.style.display = "block";
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = "AUTHENTICATING...";
+
+  setTimeout(() => {
+    if (USERS[user] && USERS[user] === pass) {
+      // Save session
+      sessionStorage.setItem("mw_user", user);
+      sessionStorage.setItem("mw_auth", "true");
+
+      const page = document.getElementById("login-page");
+      page.classList.add("login-page-out");
+      setTimeout(() => {
+        page.style.display = "none";
+        connectWS();   // start dashboard only after login
+      }, 400);
+    } else {
+      err.textContent      = "⚠ Invalid credentials — please try again";
+      err.style.display    = "block";
+      btn.disabled         = false;
+      btn.textContent      = "LOGIN TO DASHBOARD";
+      document.getElementById("password").value = "";
+      document.getElementById("password").focus();
+    }
+  }, 600);
+}
+
+function doLogout() {
+  sessionStorage.removeItem("mw_user");
+  sessionStorage.removeItem("mw_auth");
+  if (ws) { try { ws.close(); } catch(_) {} }
+  clearTimeout(reconnTimer);
+  clearInterval(pollTimer);
+  // Show login page again
+  const page = document.getElementById("login-page");
+  page.style.display    = "flex";
+  page.classList.remove("login-page-out");
+  document.getElementById("username").value = "";
+  document.getElementById("password").value = "";
+  document.getElementById("login-error").style.display = "none";
+  document.getElementById("login-btn").disabled    = false;
+  document.getElementById("login-btn").textContent = "LOGIN TO DASHBOARD";
+  document.getElementById("loading").style.display = "flex";
+  // Reset connection status
+  document.getElementById("dot").className     = "dot wait";
+  document.getElementById("conn-txt").textContent = "CONNECTING";
+}
+
+// Check existing session on load
+(function checkSession() {
+  if (sessionStorage.getItem("mw_auth") === "true") {
+    document.getElementById("login-page").style.display = "none";
+    connectWS();
+  } else {
+    // Focus username field
+    setTimeout(() => document.getElementById("username").focus(), 100);
+  }
+})();
+
+// connectWS called after login
+</script>
+</body>
+</html>
